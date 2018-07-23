@@ -16,6 +16,9 @@ repositories {
         url "https://oss.sonatype.org/content/repositories/snapshots/"
     }
 }
+allprojects {
+    ext.kotlin_version = '1.2.51'
+}
 
 version = '1.0.0-SNAPSHOT'
 sourceCompatibility = '1.8'

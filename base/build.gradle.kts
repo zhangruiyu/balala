@@ -10,7 +10,7 @@ repositories {
 
 dependencies {
     testCompile("junit", "junit", "4.12")
-//    compile("junit", "junit", "4.12")
+    compile("io.vertx:vertx-web:3.6.0-SNAPSHOT")
 }
 
 configure<JavaPluginConvention> {

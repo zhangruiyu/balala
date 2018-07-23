@@ -20,7 +20,7 @@ class RestVerticle : CoroutineVerticle() {
         postgreSQLClient = PostgreSQLClient.createShared(vertx, pgsqlConfig)
         val router = Router.router(vertx)
 
-        router.get("/home").handler(listChain)
+        router.get("/login").handler(listChain)
 
         val server = vertx.createHttpServer()
         server.requestHandler(router::accept).listen(port)
