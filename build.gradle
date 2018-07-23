@@ -1,17 +1,20 @@
 plugins {
-  id 'java'
-  id 'application'
-  id 'com.github.johnrengelman.shadow' version '2.0.1'
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '2.0.1'
+    id 'org.jetbrains.kotlin.jvm' version '1.2.51'
 }
 
 ext {
-  vertxVersion = '3.5.0'
+    vertxVersion = '3.6.0-SNAPSHOT'
+    kotlinVersion = '1.2.51'
 }
 
 repositories {
-  mavenLocal()
-  jcenter()
-  maven { url "https://plugins.gradle.org/m2/" }
+    mavenCentral()
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots/"
+    }
 }
 
 version = '1.0.0-SNAPSHOT'
@@ -19,18 +22,24 @@ sourceCompatibility = '1.8'
 
 dependencies {
 
-  compile "io.vertx:vertx-config:$vertxVersion"
+    compile "io.vertx:vertx-config:$vertxVersion"
 
-  compile "io.vertx:vertx-jdbc-client:$vertxVersion"
+    compile "io.vertx:vertx-jdbc-client:$vertxVersion"
 
-  compile "io.vertx:vertx-auth-jwt:$vertxVersion"
+    compile "io.vertx:vertx-auth-jwt:$vertxVersion"
 
-  compile "io.vertx:vertx-unit:$vertxVersion"
+    compile "io.vertx:vertx-unit:$vertxVersion"
 
-  compile "io.vertx:vertx-core:$vertxVersion"
+    compile "io.vertx:vertx-core:$vertxVersion"
 
-  compile "io.vertx:vertx-web:$vertxVersion"
+    compile "io.vertx:vertx-web:$vertxVersion"
+//    compile "vertx-lang-kotlin-codegen:$vertxVersion"
+    compile "io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion"
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+    compile "io.vertx:vertx-lang-kotlin:$vertxVersion"
 
+    compile "io.vertx:vertx-mysql-postgresql-client:$vertxVersion"
+    compile "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
 }
 
 mainClassName = 'io.vertx.core.Launcher'
@@ -40,7 +49,7 @@ shadowJar {
     baseName = 'app'
 
     manifest {
-        attributes "Main-Class": "io.vertx.core.Launcher",'Main-Verticle': mainVerticleName
+        attributes "Main-Class": "io.vertx.core.Launcher", 'Main-Verticle': mainVerticleName
     }
     classifier = 'jar'
     mergeServiceFiles {
@@ -55,5 +64,20 @@ run {
             "--on-redeploy=./gradlew classes"]
 }
 task wrapper(type: Wrapper) {
-  gradleVersion = '4.0'
+    gradleVersion = '4.0'
+}
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+compileTestKotlin {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+kotlin {
+    experimental {
+        coroutines "enable"
+    }
 }
