@@ -1,0 +1,5 @@
+rootProject.name = 'balala'
+include 'base'
+include 'verticle-db'
+include 'verticle-base'
+
