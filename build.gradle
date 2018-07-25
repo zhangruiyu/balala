@@ -36,6 +36,7 @@ dependencies {
     compile "io.vertx:vertx-core:$vertxVersion"
 
     compile "io.vertx:vertx-web:$vertxVersion"
+    compile "io.vertx:vertx-redis-client:$vertxVersion"
 //    compile "vertx-lang-kotlin-codegen:$vertxVersion"
     compile "io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion"
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
@@ -43,6 +44,7 @@ dependencies {
 
     compile "io.vertx:vertx-mysql-postgresql-client:$vertxVersion"
     compile "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+    compile project(':base')
 }
 
 mainClassName = 'io.vertx.core.Launcher'

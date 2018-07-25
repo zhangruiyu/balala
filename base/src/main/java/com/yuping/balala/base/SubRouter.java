@@ -1,3 +1,5 @@
+package com.yuping.balala.base;
+
 import io.vertx.ext.web.Router;
 
 /**
