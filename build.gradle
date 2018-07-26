@@ -44,7 +44,7 @@ dependencies {
 
     compile "io.vertx:vertx-mysql-postgresql-client:$vertxVersion"
     compile "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
-    compile project(':base')
+//    compile project(':base')
 }
 
 mainClassName = 'io.vertx.core.Launcher'
