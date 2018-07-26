@@ -8,7 +8,6 @@ import com.yuping.balala.ext.jsonOKNoData
 import com.yuping.balala.ext.jsonOk
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
-import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
@@ -23,7 +22,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     init {
         router.post("/register1").coroutineHandler { ctx -> register1(ctx) }
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
-        router.post("/register3").coroutineHandler { ctx -> register3(ctx) }
+        router.post("/login").coroutineHandler { ctx -> login(ctx) }
     }
 
     //根据手机号发送验证码
@@ -104,7 +103,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     }
 
     //注册,验证验证码
-    private suspend fun register3(ctx: RoutingContext) {
+    private suspend fun login(ctx: RoutingContext) {
         val connection = pgsql.getConnectionAwait()
         connection.updateWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON)", JsonArray().add(ctx.bodyAsString).add(ctx.bodyAsString))
     }
