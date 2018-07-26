@@ -13,6 +13,7 @@ import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
 import io.vertx.kotlin.core.json.obj
 import io.vertx.kotlin.ext.sql.getConnectionAwait
+import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
 import io.vertx.kotlin.ext.sql.updateWithParamsAwait
 import io.vertx.kotlin.redis.getAwait
 import io.vertx.kotlin.redis.setWithOptionsAwait
@@ -66,7 +67,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 if (authCode == code) {
                     //注册
                     val connection = pgsql.getConnectionAwait()
-                    val result = connection.updateWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
+                    val result = connection.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
                         array {
                             add(obj(
                                 "identity_type" to "tel",
@@ -84,12 +85,15 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                             )
                         }
                     })
+                    connection.close()
                     //说明成功
-                    if (result.updated == 1) {
+                    if (result != null) {
+                        val userId = result.getLong(0)
                         ctx.jsonOKNoData()
                     } else {
                         ctx.jsonNormalFail("注册失败,请联系客服")
                     }
+
                 } else {
                     ctx.jsonNormalFail("验证码有误,请重新尝试")
                 }
