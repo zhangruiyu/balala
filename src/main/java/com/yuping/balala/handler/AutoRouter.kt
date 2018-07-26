@@ -84,7 +84,6 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                             )
                         }
                     })
-                    print(result.toJson())
                     //说明成功
                     if (result.updated == 1) {
                         ctx.jsonOKNoData()
