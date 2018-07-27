@@ -13,7 +13,7 @@ internal fun jsonResponse(response: HttpServerResponse, statusCode: Int, body: J
 }
 
 //有返回值给客户端
-fun RoutingContext.jsonOk(data: Any, code: Int = 200, msg: String = "") = jsonResponse(response(), 200, json {
+fun RoutingContext.jsonOk(data: JsonObject, code: Int = 200, msg: String = "") = jsonResponse(response(), 200, json {
     obj(
         "code" to code,
         "data" to data)

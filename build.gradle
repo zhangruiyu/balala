@@ -39,7 +39,7 @@ dependencies {
     compile "io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion"
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     compile "io.vertx:vertx-lang-kotlin:$vertxVersion"
-
+    compile "io.vertx:vertx-auth-shiro:$vertxVersion"
     compile "io.vertx:vertx-mysql-postgresql-client:$vertxVersion"
     compile "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
     compile 'cn.hutool:hutool-core:4.1.3'

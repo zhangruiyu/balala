@@ -1,3 +1,4 @@
+import com.yuping.balala.config.Roles
 import com.yuping.balala.ext.initPgsql
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
@@ -24,7 +25,7 @@ class TestPgsql {
 
     @Test
     fun testInsert(): Unit {
-        var suite = TestSuite.create("the_test_pgsql")
+     /*   var suite = TestSuite.create("the_test_pgsql")
         val vertx = Vertx.vertx()
         val initPgsql = vertx.initPgsql()
 
@@ -37,7 +38,7 @@ class TestPgsql {
 
             }
         }
-       /* launch {
+       *//* launch {
             val updateWithParamsAwait = initPgsql.getConnectionAwait().updateWithParamsAwait("INSERT INTO users ('autos', 'info') VALUES (?::JSON,?::JSON)", json {
                 array(obj {
                     "b" to "b"
@@ -45,5 +46,13 @@ class TestPgsql {
             })
             print(updateWithParamsAwait)
         }*/
+        println(
+            json {
+                obj(
+                    "role" to array(obj("role" to Roles.COMMON.name))
+                )
+            }
+        )
+
     }
 }
