@@ -30,7 +30,7 @@ class RestVerticle : CoroutineVerticle() {
         val router = Router.router(vertx)
         router.route().handler(BodyHandler.create())
         val authProvider = JWTAuth.create(vertx, jwtConfig)
-        router.routeWithRegex(".*/user/.*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
+        router.routeWithRegex(".*/common/.*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
         router.mountSubRouter("/auth", subRouterFactory.create(SubRouterFactory.SubRouterType.AUTH))
 //        router.get("/home").handler(listChain)
 //        router.mountSubRouter("auth")

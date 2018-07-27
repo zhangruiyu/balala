@@ -20,14 +20,14 @@ import io.vertx.redis.op.SetOptions
 class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
 
-    val authProvider = JWTAuth.create(vertx, jwtConfig)
+    private val authProvider = JWTAuth.create(vertx, jwtConfig)
 
     init {
 //        router.route("/user/*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
         router.post("/register1").coroutineHandler { ctx -> register1(ctx) }
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
-        router.post("/user/ddddd").coroutineHandler { ctx -> dddd(ctx) }
+        router.post("/common/ddddd").coroutineHandler { ctx -> dddd(ctx) }
     }
 
     //根据手机号发送验证码
