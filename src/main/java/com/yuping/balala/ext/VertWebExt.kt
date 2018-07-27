@@ -1,7 +1,6 @@
-package com.yuping.balala.config
+package com.yuping.balala.ext
 
 import io.vertx.ext.asyncsql.AsyncSQLClient
-import io.vertx.ext.sql.SQLClient
 import io.vertx.ext.sql.SQLConnection
 import io.vertx.ext.web.Route
 import io.vertx.ext.web.RoutingContext

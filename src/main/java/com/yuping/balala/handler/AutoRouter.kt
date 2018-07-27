@@ -1,9 +1,9 @@
 package com.yuping.balala.handler
 
 import com.yuping.balala.config.Roles
-import com.yuping.balala.config.autoConnetctionRun
+import com.yuping.balala.ext.autoConnetctionRun
 import com.yuping.balala.config.commonRole
-import com.yuping.balala.config.coroutineHandler
+import com.yuping.balala.ext.coroutineHandler
 import com.yuping.balala.ext.get
 import com.yuping.balala.ext.jsonNormalFail
 import com.yuping.balala.ext.jsonOKNoData
