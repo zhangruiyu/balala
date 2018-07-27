@@ -1,5 +1,7 @@
 package com.yuping.balala
 
+import com.yuping.balala.config.commonRole
+import com.yuping.balala.config.jwtConfig
 import com.yuping.balala.router.SubRouterFactory
 import com.yuping.balala.config.pgsqlConfig
 import com.yuping.balala.config.port
@@ -10,6 +12,7 @@ import io.vertx.ext.asyncsql.AsyncSQLClient
 import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.handler.BodyHandler
+import io.vertx.ext.web.handler.JWTAuthHandler
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.awaitResult
 import io.vertx.redis.RedisClient
@@ -26,6 +29,8 @@ class RestVerticle : CoroutineVerticle() {
         redis = vertx.initRedis()
         val router = Router.router(vertx)
         router.route().handler(BodyHandler.create())
+        val authProvider = JWTAuth.create(vertx, jwtConfig)
+        router.routeWithRegex(".*/user/.*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
         router.mountSubRouter("/auth", subRouterFactory.create(SubRouterFactory.SubRouterType.AUTH))
 //        router.get("/home").handler(listChain)
 //        router.mountSubRouter("auth")

@@ -1,21 +1,13 @@
 package com.yuping.balala.handler
 
 import com.yuping.balala.config.Roles
-import com.yuping.balala.ext.autoConnetctionRun
-import com.yuping.balala.config.commonRole
-import com.yuping.balala.ext.coroutineHandler
-import com.yuping.balala.ext.get
-import com.yuping.balala.ext.jsonNormalFail
-import com.yuping.balala.ext.jsonOKNoData
-import com.yuping.balala.ext.jsonOk
+import com.yuping.balala.config.jwtConfig
+import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
 import io.vertx.core.Vertx
-import io.vertx.ext.auth.KeyStoreOptions
 import io.vertx.ext.auth.jwt.JWTAuth
-import io.vertx.ext.auth.jwt.JWTAuthOptions
 import io.vertx.ext.auth.jwt.impl.JWTUser
 import io.vertx.ext.web.RoutingContext
-import io.vertx.ext.web.handler.JWTAuthHandler
 import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
 import io.vertx.kotlin.core.json.obj
@@ -27,17 +19,11 @@ import io.vertx.redis.op.SetOptions
 
 class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
-    val config = JWTAuthOptions()
-        .setKeyStore(KeyStoreOptions()
-            .setPath("keystore.jceks")
-            .setType("jceks")
-            .setPassword("secret")
-        ).setPermissionsClaimKey("role")
 
-    val authProvider = JWTAuth.create(vertx, config)
+    val authProvider = JWTAuth.create(vertx, jwtConfig)
 
     init {
-        router.route("/user/*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
+//        router.route("/user/*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
         router.post("/register1").coroutineHandler { ctx -> register1(ctx) }
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
