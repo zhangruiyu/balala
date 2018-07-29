@@ -1,10 +1,12 @@
 package com.yuping.balala.handler
 
+import com.github.mauricio.async.db.postgresql.exceptions.GenericDatabaseException
 import com.yuping.balala.config.Roles
 import com.yuping.balala.config.jwtConfig
 import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
 import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.auth.jwt.impl.JWTUser
 import io.vertx.ext.web.RoutingContext
@@ -36,23 +38,29 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11) {
             ctx.jsonNormalFail("手机号格式错误")
         } else {
-            val codeKey = "RegisterCode$tel"
-            val code: String? = redis.getAwait(codeKey)
-            if (code?.isNotEmpty() == true) {
-
-                //已发送直接跳转页面
-//                ctx.jsonNormalFail("验证码发送成功")
-                ctx.jsonNormalFail("验证码还未过期,请过期后重新尝试")
+            val single = queryUserByTel(tel)
+            if (single != null) {
+                ctx.jsonNormalFail("手机号已经注册")
             } else {
-                //发送验证码
-                val setOptions = SetOptions()
-                redis.setWithOptionsAwait(codeKey, "888888", setOptions.setEX(60 * 5))
-                ctx.jsonOk(json {
-                    obj(
-                        "message" to "验证码发送成功"
-                    )
-                })
+                val codeKey = "RegisterCode$tel"
+                val code: String? = redis.getAwait(codeKey)
+                if (code?.isNotEmpty() == true) {
+
+                    //已发送直接跳转页面
+//                ctx.jsonNormalFail("验证码发送成功")
+                    ctx.jsonNormalFail("验证码还未过期,请过期后重新尝试")
+                } else {
+                    //发送验证码
+                    val setOptions = SetOptions()
+                    redis.setWithOptionsAwait(codeKey, "888888", setOptions.setEX(60 * 5))
+                    ctx.jsonOk(json {
+                        obj(
+                            "message" to "验证码发送成功"
+                        )
+                    })
+                }
             }
+
         }
     }
 
@@ -64,40 +72,51 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11 || password.isEmpty() || authCode.isEmpty()) {
             ctx.jsonNormalFail("手机号,密码和验证码不能不填")
         } else {
+            if (queryUserByTel(tel) != null) {
+                ctx.jsonNormalFail("手机号已经注册")
+                return
+            }
             val codeKey = "RegisterCode$tel"
             val code: String? = redis.getAwait(codeKey)
             //没有发送
             if (code?.isNotEmpty() == true) {
                 if (authCode == code) {
                     //注册
-                    val result = pgsql.autoConnetctionRun {
-                        return@autoConnetctionRun it.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
-                            array {
-                                this.add(obj(
-                                    "identity_type" to "tel",
-                                    "identifier" to tel,
-                                    "credential" to password
+                    try {
+                        val result = pgsql.autoConnetctionRun {
+                            it.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
+                                array {
+                                    this.add(obj(
+                                        "identity_type" to "tel",
+                                        "identifier" to tel,
+                                        "credential" to password
 
-                                ).toString())
-                                this.add(obj(
-                                    "create_time" to System.currentTimeMillis(),
-                                    "nickname" to "昵称",
-                                    "avatar" to "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg",
-                                    "birthday" to null,
-                                    "gender" to '1'
-                                ).toString()
-                                )
-                            }
-                        })
+                                    ).toString())
+                                    this.add(obj(
+                                        "create_time" to System.currentTimeMillis(),
+                                        "nickname" to "昵称",
+                                        "avatar" to "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg",
+                                        "birthday" to null,
+                                        "gender" to '1'
+                                    ).toString()
+                                    )
+                                }
+                            })
+
+
+                        }
+                        print("zhuc")
+                        //说明成功
+                        if (result != null) {
+                            val userId = result.getLong(0)
+                            ctx.jsonOKNoData()
+                        } else {
+                            ctx.jsonNormalFail("注册失败,请联系客服")
+                        }
+                    } catch (e: GenericDatabaseException) {
+                        ctx.jsonNormalFail("手机号已经注册")
                     }
-                    print("zhuc")
-                    //说明成功
-                    if (result != null) {
-                        val userId = result.getLong(0)
-                        ctx.jsonOKNoData()
-                    } else {
-                        ctx.jsonNormalFail("注册失败,请联系客服")
-                    }
+
                 } else {
                     ctx.jsonNormalFail("验证码有误,请重新尝试")
                 }
@@ -135,6 +154,16 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     private suspend fun dddd(ctx: RoutingContext) {
         println((ctx.user() as JWTUser).principal())
         ctx.jsonOKNoData()
+    }
+
+    private suspend fun queryUserByTel(tel: String): JsonArray? {
+        return pgsql.autoConnetctionRun {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT * FROM users WHERE users.autos @> ?::jsonb", json {
+                array {
+                    add(obj("identity_type" to "tel", "identifier" to tel).toString())
+                }
+            })
+        }
     }
 
 }
