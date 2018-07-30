@@ -10,9 +10,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.auth.jwt.impl.JWTUser
 import io.vertx.ext.web.RoutingContext
-import io.vertx.kotlin.core.json.array
-import io.vertx.kotlin.core.json.json
-import io.vertx.kotlin.core.json.obj
+import io.vertx.kotlin.core.json.*
 import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
 import io.vertx.kotlin.redis.getAwait
 import io.vertx.kotlin.redis.setWithOptionsAwait
@@ -38,7 +36,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11) {
             ctx.jsonNormalFail("手机号格式错误")
         } else {
-            val single = queryUserByTel(tel)
+            val single = queryUserByTel(tel, "tel")
             if (single != null) {
                 ctx.jsonNormalFail("手机号已经注册")
             } else {
@@ -72,7 +70,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11 || password.isEmpty() || authCode.isEmpty()) {
             ctx.jsonNormalFail("手机号,密码和验证码不能不填")
         } else {
-            if (queryUserByTel(tel) != null) {
+            if (queryUserByTel(tel, "tel") != null) {
                 ctx.jsonNormalFail("手机号已经注册")
                 return
             }
@@ -86,12 +84,12 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                         val result = pgsql.autoConnetctionRun {
                             it.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
                                 array {
-                                    this.add(obj(
+                                    this.add("[${(obj(
                                         "identity_type" to "tel",
                                         "identifier" to tel,
                                         "credential" to password
 
-                                    ).toString())
+                                    ))}]")
                                     this.add(obj(
                                         "create_time" to System.currentTimeMillis(),
                                         "nickname" to "昵称",
@@ -105,9 +103,9 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
 
                         }
-                        print("zhuc")
                         //说明成功
                         if (result != null) {
+                            log.debug("注册成功,手机号$tel")
                             val userId = result.getLong(0)
                             ctx.jsonOKNoData()
                         } else {
@@ -130,22 +128,32 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
     //注册,验证验证码
     private suspend fun login(ctx: RoutingContext) {
-        val tel = ctx get ("tel" to "")
-        val password = ctx get ("password" to "")
-        if (tel.length < 11 || password.isEmpty()) {
+//        identifier: String, credential: String, identity_type: String
+        val identifier = ctx get ("identifier" to "")
+        val credential = ctx get ("credential" to "")
+        val identity_type = ctx get ("identity_type" to "")
+        if (identifier.isEmpty() || credential.isEmpty() || identity_type.isEmpty()) {
             ctx.jsonNormalFail("输入信息不完整")
         } else {
-            val token = authProvider.generateToken(json {
-                obj("tel" to tel,
-                    "role" to array(Roles.COMMON.name)
-                )
-            })
-            ctx.jsonOk(json {
-                obj(
-                    "token" to token,
-                    "tel" to tel
-                )
-            })
+            val userByIdentifier = queryUserByTel(identifier, identity_type)
+
+//            val mapFrom = JsonObject.mapFrom(userByTel?.getString(1))
+            if (checkLogin(identifier, credential, identity_type, JsonArray(userByIdentifier?.getString(1)))) {
+                val token = authProvider.generateToken(json {
+                    obj("tel" to "",
+                        "role" to array(Roles.COMMON.name)
+                    )
+                })
+                ctx.jsonOk(json {
+                    obj(
+                        "token" to token,
+                        "tel" to ""
+                    )
+                })
+            } else {
+                ctx.jsonNormalFail("登录信息不匹配")
+            }
+
         }
 //        connection.updateWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON)", JsonArray().add(ctx.bodyAsString).add(ctx.bodyAsString))
     }
@@ -156,14 +164,31 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         ctx.jsonOKNoData()
     }
 
-    private suspend fun queryUserByTel(tel: String): JsonArray? {
-        return pgsql.autoConnetctionRun {
+    /**
+     * 根据验证类型查用户信息
+     */
+    private suspend fun queryUserByTel(identifier: String, identity_type: String): JsonArray? {
+        val info = pgsql.autoConnetctionRun {
             return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT * FROM users WHERE users.autos @> ?::jsonb", json {
-                array {
-                    add(obj("identity_type" to "tel", "identifier" to tel).toString())
-                }
+                array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
             })
         }
+        log.info(info?.toString())
+        return info
+    }
+
+    private fun checkLogin(identifier: String, credential: String, identity_type: String, userByIdentifier: JsonArray?): Boolean {
+        if (userByIdentifier == null) {
+            return false
+        }
+        val userSingleAuto = io.vertx.core.json.JsonObject(userByIdentifier.single {
+            io.vertx.core.json.JsonObject(it.toString()).getString("identity_type") == identity_type
+        }.toString())
+        return userSingleAuto.getString("credential") == credential && userSingleAuto.getString("identifier") == identifier
+    }
+
+    private fun checkPassword(localPassword: String, inputPassword: String): Boolean {
+        return localPassword == inputPassword
     }
 
 }

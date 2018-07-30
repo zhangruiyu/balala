@@ -5,8 +5,8 @@ import com.yuping.balala.ext.initRedis
 import io.vertx.core.Vertx
 import io.vertx.ext.asyncsql.AsyncSQLClient
 import io.vertx.ext.web.Router
-import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.redis.RedisClient
+import org.slf4j.LoggerFactory
 
 /**
  * 子路由的接口
@@ -15,6 +15,7 @@ import io.vertx.redis.RedisClient
  * Created on 2017-10-12 10:11.
  */
 abstract class SubRouter(val vertx: Vertx) {
+    val log = LoggerFactory.getLogger(javaClass)!!
     val router: Router = Router.router(vertx)
     val redis: RedisClient = vertx.initRedis()
     val pgsql: AsyncSQLClient = vertx.initPgsql()
