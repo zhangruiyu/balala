@@ -7,10 +7,13 @@ import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import io.vertx.ext.auth.jwt.JWTAuth
 import io.vertx.ext.auth.jwt.impl.JWTUser
 import io.vertx.ext.web.RoutingContext
-import io.vertx.kotlin.core.json.*
+import io.vertx.kotlin.core.json.array
+import io.vertx.kotlin.core.json.json
+import io.vertx.kotlin.core.json.obj
 import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
 import io.vertx.kotlin.redis.getAwait
 import io.vertx.kotlin.redis.setWithOptionsAwait
@@ -27,6 +30,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/register1").coroutineHandler { ctx -> register1(ctx) }
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
+        router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
         router.post("/common/ddddd").coroutineHandler { ctx -> dddd(ctx) }
     }
 
@@ -36,7 +40,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11) {
             ctx.jsonNormalFail("手机号格式错误")
         } else {
-            val single = queryUserByTel(tel, "tel")
+            val single = queryUserByType(tel, "tel")
             if (single != null) {
                 ctx.jsonNormalFail("手机号已经注册")
             } else {
@@ -70,7 +74,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (tel.length < 11 || password.isEmpty() || authCode.isEmpty()) {
             ctx.jsonNormalFail("手机号,密码和验证码不能不填")
         } else {
-            if (queryUserByTel(tel, "tel") != null) {
+            if (queryUserByType(tel, "tel") != null) {
                 ctx.jsonNormalFail("手机号已经注册")
                 return
             }
@@ -131,23 +135,25 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 //        identifier: String, credential: String, identity_type: String
         val identifier = ctx get ("identifier" to "")
         val credential = ctx get ("credential" to "")
-        val identity_type = ctx get ("identity_type" to "")
-        if (identifier.isEmpty() || credential.isEmpty() || identity_type.isEmpty()) {
+        val identityType = ctx get ("identity_type" to "")
+        if (identifier.isEmpty() || credential.isEmpty() || identityType.isEmpty()) {
             ctx.jsonNormalFail("输入信息不完整")
         } else {
-            val userByIdentifier = queryUserByTel(identifier, identity_type)
-
-//            val mapFrom = JsonObject.mapFrom(userByTel?.getString(1))
-            if (checkLogin(identifier, credential, identity_type, JsonArray(userByIdentifier?.getString(1)))) {
+            val userByIdentifier = queryUserByType(identifier, identityType)
+            val autos = JsonArray(userByIdentifier?.getString(1))
+            if (checkLogin(identifier, credential, identityType, autos)) {
+                val telIdentifierInfo = queryIdentifierByType(autos, "tel")
+                val tel = telIdentifierInfo!!.getString("identifier")
                 val token = authProvider.generateToken(json {
-                    obj("tel" to "",
+                    obj("tel" to tel,
                         "role" to array(Roles.COMMON.name)
                     )
                 })
+
                 ctx.jsonOk(json {
                     obj(
                         "token" to token,
-                        "tel" to ""
+                        "tel" to tel
                     )
                 })
             } else {
@@ -159,6 +165,27 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     }
 
     //注册,验证验证码
+    private suspend fun bindOpenID(ctx: RoutingContext) {
+//        queryIdentifierByType(ctx.jwtUser().principal().getString("tel"))
+        val identifier = ctx get ("identifier" to "")
+        val credential = ctx get ("credential" to "")
+        val identityType = ctx get ("identity_type" to "")
+
+        if (identifier.isEmpty() || credential.isEmpty() || identityType.isEmpty()) {
+            ctx.jsonNormalFail("输入信息不完整")
+        } else {
+            val tel = ctx.jwtUser().principal().getString("tel")
+            if (tel.isEmpty()) {
+                ctx.jsonNormalFail("接口非法访问")
+            } else {
+                //查询到用户autos 判断里面是否有第三方对应的identifier
+                //没有就添加进去
+                //返回添加成功
+            }
+        }
+    }
+
+    //注册,验证验证码
     private suspend fun dddd(ctx: RoutingContext) {
         println((ctx.user() as JWTUser).principal())
         ctx.jsonOKNoData()
@@ -167,7 +194,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     /**
      * 根据验证类型查用户信息
      */
-    private suspend fun queryUserByTel(identifier: String, identity_type: String): JsonArray? {
+    private suspend fun queryUserByType(identifier: String, identity_type: String): JsonArray? {
         val info = pgsql.autoConnetctionRun {
             return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT * FROM users WHERE users.autos @> ?::jsonb", json {
                 array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
@@ -177,18 +204,21 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         return info
     }
 
+    /**
+     * 判断用户账号,密码是否正确
+     */
     private fun checkLogin(identifier: String, credential: String, identity_type: String, userByIdentifier: JsonArray?): Boolean {
         if (userByIdentifier == null) {
             return false
         }
-        val userSingleAuto = io.vertx.core.json.JsonObject(userByIdentifier.single {
-            io.vertx.core.json.JsonObject(it.toString()).getString("identity_type") == identity_type
-        }.toString())
-        return userSingleAuto.getString("credential") == credential && userSingleAuto.getString("identifier") == identifier
+        val userSingleAuto = queryIdentifierByType(userByIdentifier, identity_type)
+        return userSingleAuto?.getString("credential") == credential && userSingleAuto.getString("identifier") == identifier
     }
 
-    private fun checkPassword(localPassword: String, inputPassword: String): Boolean {
-        return localPassword == inputPassword
+    private fun queryIdentifierByType(userByIdentifier: JsonArray, identity_type: String): JsonObject? {
+        return JsonObject(userByIdentifier.single {
+            JsonObject(it.toString()).getString("identity_type") == identity_type
+        }.toString())
     }
 
 }
