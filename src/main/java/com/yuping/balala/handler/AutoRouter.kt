@@ -1,8 +1,7 @@
 package com.yuping.balala.handler
 
 import com.github.mauricio.async.db.postgresql.exceptions.GenericDatabaseException
-import com.yuping.balala.config.Roles
-import com.yuping.balala.config.jwtConfig
+import com.yuping.balala.config.*
 import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
 import io.vertx.core.Vertx
@@ -15,6 +14,7 @@ import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
 import io.vertx.kotlin.core.json.obj
 import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
+import io.vertx.kotlin.ext.sql.updateWithParamsAwait
 import io.vertx.kotlin.redis.getAwait
 import io.vertx.kotlin.redis.setWithOptionsAwait
 import io.vertx.redis.op.SetOptions
@@ -146,6 +146,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 val tel = telIdentifierInfo!!.getString("identifier")
                 val token = authProvider.generateToken(json {
                     obj("tel" to tel,
+                        "id" to userByIdentifier!!.getInteger(0),
                         "role" to array(Roles.COMMON.name)
                     )
                 })
@@ -161,26 +162,43 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
             }
 
         }
-//        connection.updateWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON)", JsonArray().add(ctx.bodyAsString).add(ctx.bodyAsString))
     }
 
-    //注册,验证验证码
+    //绑定第三方登录
     private suspend fun bindOpenID(ctx: RoutingContext) {
 //        queryIdentifierByType(ctx.jwtUser().principal().getString("tel"))
         val identifier = ctx get ("identifier" to "")
         val credential = ctx get ("credential" to "")
         val identityType = ctx get ("identity_type" to "")
-
-        if (identifier.isEmpty() || credential.isEmpty() || identityType.isEmpty()) {
+        (identifier.isEmpty() || credential.isEmpty() || (!openIdTypeList.contains(identityType))).yes {
             ctx.jsonNormalFail("输入信息不完整")
-        } else {
+        }.otherwise {
             val tel = ctx.jwtUser().principal().getString("tel")
             if (tel.isEmpty()) {
                 ctx.jsonNormalFail("接口非法访问")
             } else {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
-                //没有就添加进去
-                //返回添加成功
+                val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
+                //查询到了,//没有就添加进去
+                (queryIdentifierByType(autos, identityType) == null).yes {
+                    val result = pgsql.autoConnetctionRun {
+                        it.updateWithParamsAwait("update users set autos = autos || ?::jsonb  where id = ?;", json {
+                            array(obj("identity_type" to identityType, "identifier" to identifier, "credential" to credential).toString(), ctx.jwtUser().principal().getInteger("id"))
+                        })
+                    }
+                    (result.updated == 1).yes {
+                        //返回添加成功
+                        ctx.jsonOKNoData("绑定成功")
+                    }.otherwise {
+                        ctx.jsonNormalFail("绑定失败,请再次尝试或者联系客服")
+                    }
+
+                }.otherwise {
+
+                    ctx.jsonNormalFail("已经绑定过$identityType")
+                }
+
+
             }
         }
     }
@@ -215,10 +233,15 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         return userSingleAuto?.getString("credential") == credential && userSingleAuto.getString("identifier") == identifier
     }
 
-    private fun queryIdentifierByType(userByIdentifier: JsonArray, identity_type: String): JsonObject? {
-        return JsonObject(userByIdentifier.single {
+    private fun queryIdentifierByType(autos: JsonArray, identity_type: String): JsonObject? {
+        val singleAuto = autos.singleOrNull {
             JsonObject(it.toString()).getString("identity_type") == identity_type
-        }.toString())
+        }
+        return if (singleAuto == null) {
+            null
+        } else {
+            JsonObject(singleAuto.toString())
+        }
     }
 
 }
