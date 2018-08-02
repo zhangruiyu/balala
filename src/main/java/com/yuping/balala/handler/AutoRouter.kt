@@ -1,9 +1,13 @@
 package com.yuping.balala.handler
 
 import com.github.mauricio.async.db.postgresql.exceptions.GenericDatabaseException
-import com.yuping.balala.config.*
+import com.yuping.balala.config.Roles
+import com.yuping.balala.config.jwtConfig
+import com.yuping.balala.config.openIdTypeList
 import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
+import com.yuping.balala.utils.AuthCodeUtils
+import com.yuping.balala.utils.AutoCode
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -16,12 +20,9 @@ import io.vertx.kotlin.core.json.obj
 import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
 import io.vertx.kotlin.ext.sql.updateWithParamsAwait
 import io.vertx.kotlin.redis.getAwait
-import io.vertx.kotlin.redis.setWithOptionsAwait
-import io.vertx.redis.op.SetOptions
 
 
 class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
-
 
     private val authProvider = JWTAuth.create(vertx, jwtConfig)
 
@@ -30,8 +31,18 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/register1").coroutineHandler { ctx -> register1(ctx) }
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
+        router.post("/forgetPassword").coroutineHandler { ctx -> forgetPassword(ctx) }
         router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
         router.post("/common/ddddd").coroutineHandler { ctx -> dddd(ctx) }
+    }
+
+    private suspend fun forgetPassword(ctx: RoutingContext) {
+        val tel = ctx get ("tel" to "")
+        (tel.length < 11).yes {
+            ctx.jsonNormalFail("手机号格式错误")
+        }.otherwise {
+            AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.ForgetPassword, tel)
+        }
     }
 
     //根据手机号发送验证码
@@ -44,24 +55,9 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
             if (single != null) {
                 ctx.jsonNormalFail("手机号已经注册")
             } else {
-                val codeKey = "RegisterCode$tel"
-                val code: String? = redis.getAwait(codeKey)
-                if (code?.isNotEmpty() == true) {
-
-                    //已发送直接跳转页面
-//                ctx.jsonNormalFail("验证码发送成功")
-                    ctx.jsonNormalFail("验证码还未过期,请过期后重新尝试")
-                } else {
-                    //发送验证码
-                    val setOptions = SetOptions()
-                    redis.setWithOptionsAwait(codeKey, "888888", setOptions.setEX(60 * 5))
-                    ctx.jsonOk(json {
-                        obj(
-                            "message" to "验证码发送成功"
-                        )
-                    })
-                }
+                AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.RegisterCode, tel)
             }
+
 
         }
     }
