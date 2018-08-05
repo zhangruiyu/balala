@@ -24,3 +24,5 @@ fun RoutingContext.jwtUser(): JWTUser {
     log.info("用户token信息:${jwtUser.principal()}")
     return jwtUser
 }
+
+

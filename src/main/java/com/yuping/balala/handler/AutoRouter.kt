@@ -32,6 +32,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
         router.post("/forgetPassword").coroutineHandler { ctx -> forgetPassword(ctx) }
         router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
+        router.post("/common/unBindOpenID").coroutineHandler { ctx -> unBindOpenID(ctx) }
     }
 
     private suspend fun forgetPassword(ctx: RoutingContext) {
@@ -189,6 +190,45 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 }.otherwise {
 
                     ctx.jsonNormalFail("已经绑定过$identityType")
+                }
+
+
+            }
+        }
+    }
+
+    //解绑第三方登录
+    private suspend fun unBindOpenID(ctx: RoutingContext) {
+        val identityType = ctx get ("identity_type" to "")
+        ((!openIdTypeList.contains(identityType))).yes {
+            ctx.jsonNormalFail("输入信息不完整")
+        }.otherwise {
+            val tel = ctx.getUserField<String>("tel")
+            if (tel!!.isEmpty()) {
+                ctx.jsonNormalFail("接口非法访问")
+            } else {
+                //查询到用户autos 判断里面是否有第三方对应的identifier
+                val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
+                //查询到了就删除
+                val singleAuto = queryIdentifierByType(autos, identityType)
+                (singleAuto != null).yes {
+
+                    val result = pgsql.autoConnetctionRun {
+                        it.updateWithParamsAwait("update users set autos = autos - ? where id = ?;", json {
+                            array(autos.indexOf(singleAuto).toString(), ctx.getUserField<Int>("id").toString())
+                        })
+                    }
+                    log.error(result.toJson().toString())
+                    (result.updated == 1).yes {
+                        //返回添加成功
+                        ctx.jsonOKNoData("解绑成功")
+                    }.otherwise {
+                        ctx.jsonNormalFail("解绑失败,请再次尝试或者联系客服")
+                    }
+
+                }.otherwise {
+
+                    ctx.jsonNormalFail("还没有绑定过$identityType")
                 }
 
 
