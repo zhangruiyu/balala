@@ -72,8 +72,8 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                         val userId = getUserId(user)
                         val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
                         val result = pgsql.autoConnetctionRun {
-                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{?,credential}', ?::jsonb, FALSE) WHERE id = ?", json {
-                                array(telIndex.toString(), "\'\"$newPassword\"\'", userId.toString())
+                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
+                                array(userId.toString())
                             })
                         }
                         //说明成功
