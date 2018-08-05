@@ -8,6 +8,7 @@ import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouter
 import com.yuping.balala.utils.AuthCodeUtils
 import com.yuping.balala.utils.AutoCode
+import com.yuping.balala.utils.ValueCheckUtils
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -31,10 +32,12 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/register2").coroutineHandler { ctx -> register2(ctx) }
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
         router.post("/forgetPassword").coroutineHandler { ctx -> forgetPassword(ctx) }
+        router.post("/restPassword").coroutineHandler { ctx -> restPassword(ctx) }
         router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
         router.post("/common/unBindOpenID").coroutineHandler { ctx -> unBindOpenID(ctx) }
     }
 
+    //发送重置密码的验证码
     private suspend fun forgetPassword(ctx: RoutingContext) {
         val tel = ctx get ("tel" to "")
         (tel.length < 11).yes {
@@ -42,6 +45,50 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         }.otherwise {
             AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.ForgetPassword, tel)
         }
+    }
+
+    //重置密码
+    private suspend fun restPassword(ctx: RoutingContext) {
+        val tel = ctx get ("tel" to "")
+        val code = ctx get ("code" to "")
+        val newPassword = ctx get ("newPassword" to "")
+        if (code.length < 6) {
+            ctx.jsonNormalFail("验证码格式不对")
+        } else if (!ValueCheckUtils.isTel(tel)) {
+            ctx.jsonNormalFail("手机号格式不对")
+        } else if (!ValueCheckUtils.isPassword(newPassword)) {
+            ctx.jsonNormalFail("新密码格式不对")
+        } else {
+            val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
+            //如果验证码没错
+            when {
+                sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
+                sendCode != code -> ctx.jsonNormalFail("验证码错误")
+                else -> {
+                    val user = queryUserByType(tel, "tel")
+                    if (user == null) {
+                        ctx.jsonNormalFail("该用户未注册")
+                    } else {
+                        val userId = getUserId(user)
+                        val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
+                        val result = pgsql.autoConnetctionRun {
+                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{?,credential}', ?::jsonb, FALSE) WHERE id = ?", json {
+                                array(telIndex.toString(), "\'\"$newPassword\"\'", userId.toString())
+                            })
+                        }
+                        //说明成功
+                        if (result.updated == 1) {
+                            log.debug("注册成功,手机号$tel")
+                            ctx.jsonOKNoData()
+                        } else {
+                            ctx.jsonNormalFail("密码修改失败,请联系客服")
+                        }
+                    }
+
+                }
+            }
+        }
+
     }
 
     //根据手机号发送验证码
@@ -82,22 +129,18 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                     try {
                         val result = pgsql.autoConnetctionRun {
                             it.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
-                                array {
-                                    this.add("[${(obj(
-                                        "identity_type" to "tel",
-                                        "identifier" to tel,
-                                        "credential" to password
+                                array(array(obj(
+                                    "identity_type" to "tel",
+                                    "identifier" to tel,
+                                    "credential" to password
 
-                                    ))}]")
-                                    this.add(obj(
-                                        "create_time" to System.currentTimeMillis(),
-                                        "nickname" to "昵称",
-                                        "avatar" to "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg",
-                                        "birthday" to null,
-                                        "gender" to '1'
-                                    ).toString()
-                                    )
-                                }
+                                )).toString(), obj(
+                                    "create_time" to System.currentTimeMillis(),
+                                    "nickname" to "昵称",
+                                    "avatar" to "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg",
+                                    "birthday" to null,
+                                    "gender" to '1'
+                                ).toString())
                             })
 
 
@@ -134,14 +177,14 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (identifier.isEmpty() || credential.isEmpty() || identityType.isEmpty()) {
             ctx.jsonNormalFail("输入信息不完整")
         } else {
-            val userByIdentifier = queryUserByType(identifier, identityType)
-            val autos = JsonArray(userByIdentifier?.getString(1))
+            val user = queryUserByType(identifier, identityType)
+            val autos = getUserAutos(user!!)
             if (checkLogin(identifier, credential, identityType, autos)) {
-                val telIdentifierInfo = queryIdentifierByType(autos, "tel")
+                val telIdentifierInfo = queryAutoByType(autos, "tel")
                 val tel = telIdentifierInfo!!.getString("identifier")
                 val token = authProvider.generateToken(json {
                     obj("tel" to tel,
-                        "id" to userByIdentifier!!.getInteger(0),
+                        "id" to getUserId(user),
                         "role" to array(Roles.COMMON.name)
                     )
                 })
@@ -174,7 +217,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
                 val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
                 //查询到了,//没有就添加进去
-                (queryIdentifierByType(autos, identityType) == null).yes {
+                (queryAutoByType(autos, identityType) == null).yes {
                     val result = pgsql.autoConnetctionRun {
                         it.updateWithParamsAwait("update users set autos = autos || ?::jsonb  where id = ?;", json {
                             array(obj("identity_type" to identityType, "identifier" to identifier, "credential" to credential).toString(), ctx.jwtUser().principal().getInteger("id"))
@@ -210,15 +253,13 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
                 val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
                 //查询到了就删除
-                val singleAuto = queryIdentifierByType(autos, identityType)
+                val singleAuto = queryAutoByType(autos, identityType)
                 (singleAuto != null).yes {
-
                     val result = pgsql.autoConnetctionRun {
-                        it.updateWithParamsAwait("update users set autos = autos - ? where id = ?;", json {
+                        it.updateWithParamsAwait("update users set autos = autos::jsonb - ? where id = ?;", json {
                             array(autos.indexOf(singleAuto).toString(), ctx.getUserField<Int>("id").toString())
                         })
                     }
-                    log.error(result.toJson().toString())
                     (result.updated == 1).yes {
                         //返回添加成功
                         ctx.jsonOKNoData("解绑成功")
@@ -236,31 +277,22 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         }
     }
 
-    /**
-     * 根据验证类型查用户信息
-     */
-    private suspend fun queryUserByType(identifier: String, identity_type: String): JsonArray? {
-        val info = pgsql.autoConnetctionRun {
-            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT * FROM users WHERE users.autos @> ?::jsonb", json {
-                array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
-            })
-        }
-        log.info(info?.toString())
-        return info
-    }
 
     /**
-     * 判断用户账号,密码是否正确
+     * 判断用户账号,密码,类型是否正确
      */
     private fun checkLogin(identifier: String, credential: String, identity_type: String, userByIdentifier: JsonArray?): Boolean {
         if (userByIdentifier == null) {
             return false
         }
-        val userSingleAuto = queryIdentifierByType(userByIdentifier, identity_type)
+        val userSingleAuto = queryAutoByType(userByIdentifier, identity_type)
         return userSingleAuto?.getString("credential") == credential && userSingleAuto.getString("identifier") == identifier
     }
 
-    private fun queryIdentifierByType(autos: JsonArray, identity_type: String): JsonObject? {
+    /**
+     * 根据所以autos查询到对应type的单一对象
+     */
+    private fun queryAutoByType(autos: JsonArray, identity_type: String): JsonObject? {
         val singleAuto = autos.singleOrNull {
             JsonObject(it.toString()).getString("identity_type") == identity_type
         }
@@ -271,4 +303,60 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         }
     }
 
+    /**
+     * 根据所以userId查询到对应type的单一对象
+     */
+    private suspend fun queryAutosById(id: Int): JsonArray? {
+        return pgsql.autoConnetctionRun {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.autos FROM users WHERE users.id = ?;", json {
+                array(id)
+            })
+        }
+    }
+
+
+    /**
+     * 根据autos和identity_type查询到对应auto的index
+     */
+    private fun querySingleAutoIndexById(autos: JsonArray, identity_type: String): Int {
+        return autos.indexOf(queryAutoByType(autos, identity_type))
+    }
+
+    /**
+     * 根据所以userId查询到对应user
+     */
+    private suspend fun queryUserById(id: Int): JsonArray? {
+        return pgsql.autoConnetctionRun {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos,users.info FROM users WHERE users.id = ?;", json {
+                array(id)
+            })
+        }
+    }
+
+    /**
+     * 根据验证类型查用户信息
+     */
+    private suspend fun queryUserByType(identifier: String, identity_type: String): JsonArray? {
+        val info = pgsql.autoConnetctionRun {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos,users.info FROM users WHERE users.autos @> ?::jsonb", json {
+                array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
+            })
+        }
+        log.info(info?.toString())
+        return info
+    }
+
+    /**
+     * 根据user拿到autos
+     */
+    private fun getUserAutos(user: JsonArray): JsonArray {
+        return JsonArray(user.getString(1))
+    }
+
+    /**
+     * 根据user拿到id
+     */
+    private fun getUserId(user: JsonArray): Int {
+        return user.getInteger(0)
+    }
 }
