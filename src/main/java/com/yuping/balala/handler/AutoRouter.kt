@@ -12,7 +12,6 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.auth.jwt.JWTAuth
-import io.vertx.ext.auth.jwt.impl.JWTUser
 import io.vertx.ext.web.RoutingContext
 import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
@@ -33,7 +32,6 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/login").coroutineHandler { ctx -> login(ctx) }
         router.post("/forgetPassword").coroutineHandler { ctx -> forgetPassword(ctx) }
         router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
-        router.post("/common/ddddd").coroutineHandler { ctx -> dddd(ctx) }
     }
 
     private suspend fun forgetPassword(ctx: RoutingContext) {
@@ -162,7 +160,6 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
     //绑定第三方登录
     private suspend fun bindOpenID(ctx: RoutingContext) {
-//        queryIdentifierByType(ctx.jwtUser().principal().getString("tel"))
         val identifier = ctx get ("identifier" to "")
         val credential = ctx get ("credential" to "")
         val identityType = ctx get ("identity_type" to "")
@@ -197,12 +194,6 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
 
             }
         }
-    }
-
-    //注册,验证验证码
-    private suspend fun dddd(ctx: RoutingContext) {
-        println((ctx.user() as JWTUser).principal())
-        ctx.jsonOKNoData()
     }
 
     /**
