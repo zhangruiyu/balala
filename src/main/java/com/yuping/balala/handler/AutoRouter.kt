@@ -72,8 +72,12 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                         val userId = getUserId(user)
                         val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
                         val result = pgsql.autoConnetctionRun {
-                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
-                                array(userId.toString())
+                            /*    it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
+                                    array(userId.toString())
+                                })
+                                */
+                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,array[?::text,'credential'::text], '\"hhhh\"', FALSE) WHERE id = ?;", json {
+                                array(telIndex, userId.toString())
                             })
                         }
                         //说明成功
@@ -256,7 +260,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 val singleAuto = queryAutoByType(autos, identityType)
                 (singleAuto != null).yes {
                     val result = pgsql.autoConnetctionRun {
-                        it.updateWithParamsAwait("update users set autos = autos::jsonb - ? where id = ?;", json {
+                        it.updateWithParamsAwait("update users set autos = autos - ?::Int where id = ?;", json {
                             array(autos.indexOf(singleAuto).toString(), ctx.getUserField<Int>("id").toString())
                         })
                     }
