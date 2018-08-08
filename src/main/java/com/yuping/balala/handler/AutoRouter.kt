@@ -288,7 +288,11 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
             updateList.add("avatar" to avatar)
         }
         if (gender.isNotEmpty()) {
-            updateList.add("gender" to gender)
+            if (gender == "0" || gender == "1") {
+                updateList.add("gender" to gender)
+            } else {
+                "性别格式不对".throwMessageException()
+            }
         }
         if (nickname.isNotEmpty()) {
             updateList.add("nickname" to nickname)
@@ -297,52 +301,24 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
             updateList.add("birthday" to nickname)
         }
         if (updateList.isEmpty()) {
-            ctx.jsonNormalFail("请添加修改信息")
+            "请添加需要修改的数据".throwMessageException()
+        }
+        val names = updateList.joinToString("=?,", postfix = "=?,") { it.first }.removeSuffix(",")
+        val values = (updateList.map {
+            it.second
+        }).toList().toMutableList()
+        values.add(getUserId(ctx.principal()).toString())
+        val result = pgsql.autoConnetctionRun {
+            it.updateWithParamsAwait("UPDATE users SET $names WHERE id = ?", json {
+                array(values)
+            })
+        }
+        //说明成功
+        if (result.updated == 1) {
+            ctx.jsonOKNoData()
         } else {
-
+            ctx.jsonNormalFail("资料修改失败")
         }
-        /*  val newPassword = ctx get ("newPassword" to "")
-          if (code.len gth < 6) {
-              ctx.jsonNormalFail("验证码格式不对")
-          } else if (!ValueCheckUtils.isTel(tel)) {
-              ctx.jsonNormalFail("手机号格式不对")
-          } else if (!ValueCheckUtils.isPassword(newPassword)) {
-              ctx.jsonNormalFail("新密码格式不对")
-          } else {
-              val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
-              //如果验证码没错
-              when {
-                  sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
-                  sendCode != code -> ctx.jsonNormalFail("验证码错误")
-                  else -> {
-                      val user = queryUserByType(tel, "tel")
-                      if (user == null) {
-                          ctx.jsonNormalFail("该用户未注册")
-                      } else {
-                          val userId = getUserId(user)
-                          val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
-                          val result = pgsql.autoConnetctionRun {
-                              *//*    it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
-                                    array(userId.toString())
-                                })
-                                *//*
-                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,array[?::text,'credential'::text], '\"hhhh\"', FALSE) WHERE id = ?;", json {
-                                array(telIndex, userId.toString())
-                            })
-                        }
-                        //说明成功
-                        if (result.updated == 1) {
-                            log.debug("注册成功,手机号$tel")
-                            ctx.jsonOKNoData()
-                        } else {
-                            ctx.jsonNormalFail("密码修改失败,请联系客服")
-                        }
-                    }
-
-                }
-            }
-        }
-*/
     }
 
     /**
@@ -421,9 +397,16 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     }
 
     /**
-     * 根据user拿到id
+     * 根据userarray拿到id
      */
     private fun getUserId(user: JsonArray): Int {
         return user.getInteger(0)
+    }
+
+    /**
+     * 根据userobj(也就是token里)拿到id
+     */
+    private fun getUserId(user: JsonObject): Int {
+        return user.getInteger("id")
     }
 }

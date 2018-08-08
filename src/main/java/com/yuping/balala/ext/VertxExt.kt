@@ -3,6 +3,7 @@ package com.yuping.balala.ext
 import com.yuping.balala.config.pgsqlConfig
 import com.yuping.balala.config.redisConfig
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
 import io.vertx.core.logging.LoggerFactory
 import io.vertx.ext.asyncsql.AsyncSQLClient
 import io.vertx.ext.asyncsql.PostgreSQLClient
@@ -23,6 +24,10 @@ fun RoutingContext.jwtUser(): JWTUser {
     val jwtUser = user() as JWTUser
     log.info("用户token信息:${jwtUser.principal()}")
     return jwtUser
+}
+
+fun RoutingContext.principal(): JsonObject {
+    return jwtUser().principal()
 }
 
 
