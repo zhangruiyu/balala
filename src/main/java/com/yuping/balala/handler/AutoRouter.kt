@@ -1,5 +1,6 @@
 package com.yuping.balala.handler
 
+import cn.hutool.core.date.DateUtil
 import com.github.mauricio.async.db.postgresql.exceptions.GenericDatabaseException
 import com.yuping.balala.config.Roles
 import com.yuping.balala.config.jwtConfig
@@ -35,65 +36,9 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         router.post("/restPassword").coroutineHandler { ctx -> restPassword(ctx) }
         router.post("/common/bindOpenID").coroutineHandler { ctx -> bindOpenID(ctx) }
         router.post("/common/unBindOpenID").coroutineHandler { ctx -> unBindOpenID(ctx) }
+        router.post("/common/updateUserInfo").coroutineHandler { ctx -> updateUserInfo(ctx) }
     }
 
-    //发送重置密码的验证码
-    private suspend fun forgetPassword(ctx: RoutingContext) {
-        val tel = ctx get ("tel" to "")
-        (tel.length < 11).yes {
-            ctx.jsonNormalFail("手机号格式错误")
-        }.otherwise {
-            AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.ForgetPassword, tel)
-        }
-    }
-
-    //重置密码
-    private suspend fun restPassword(ctx: RoutingContext) {
-        val tel = ctx get ("tel" to "")
-        val code = ctx get ("code" to "")
-        val newPassword = ctx get ("newPassword" to "")
-        if (code.length < 6) {
-            ctx.jsonNormalFail("验证码格式不对")
-        } else if (!ValueCheckUtils.isTel(tel)) {
-            ctx.jsonNormalFail("手机号格式不对")
-        } else if (!ValueCheckUtils.isPassword(newPassword)) {
-            ctx.jsonNormalFail("新密码格式不对")
-        } else {
-            val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
-            //如果验证码没错
-            when {
-                sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
-                sendCode != code -> ctx.jsonNormalFail("验证码错误")
-                else -> {
-                    val user = queryUserByType(tel, "tel")
-                    if (user == null) {
-                        ctx.jsonNormalFail("该用户未注册")
-                    } else {
-                        val userId = getUserId(user)
-                        val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
-                        val result = pgsql.autoConnetctionRun {
-                            /*    it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
-                                    array(userId.toString())
-                                })
-                                */
-                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,array[?::text,'credential'::text], '\"hhhh\"', FALSE) WHERE id = ?;", json {
-                                array(telIndex, userId.toString())
-                            })
-                        }
-                        //说明成功
-                        if (result.updated == 1) {
-                            log.debug("注册成功,手机号$tel")
-                            ctx.jsonOKNoData()
-                        } else {
-                            ctx.jsonNormalFail("密码修改失败,请联系客服")
-                        }
-                    }
-
-                }
-            }
-        }
-
-    }
 
     //根据手机号发送验证码
     private suspend fun register1(ctx: RoutingContext) {
@@ -132,21 +77,14 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                     //注册
                     try {
                         val result = pgsql.autoConnetctionRun {
-                            it.querySingleWithParamsAwait("INSERT INTO users (autos, info) VALUES (?::JSON,?::JSON) RETURNING id", json {
+                            it.querySingleWithParamsAwait("INSERT INTO users (autos,avatar,create_time) VALUES (?::JSON,?,?) RETURNING id", json {
                                 array(array(obj(
                                     "identity_type" to "tel",
                                     "identifier" to tel,
                                     "credential" to password
 
-                                )).toString(), obj(
-                                    "create_time" to System.currentTimeMillis(),
-                                    "nickname" to "昵称",
-                                    "avatar" to "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg",
-                                    "birthday" to null,
-                                    "gender" to '1'
-                                ).toString())
+                                )).toString(), "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg", DateUtil.now())
                             })
-
 
                         }
                         //说明成功
@@ -179,7 +117,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         val credential = ctx get ("credential" to "")
         val identityType = ctx get ("identity_type" to "")
         if (identifier.isEmpty() || credential.isEmpty() || identityType.isEmpty()) {
-            ctx.jsonNormalFail("输入信息不完整")
+            "输入信息不完整".throwMessageException()
         } else {
             val user = queryUserByType(identifier, identityType)
             val autos = getUserAutos(user!!)
@@ -281,6 +219,131 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         }
     }
 
+    //发送重置密码的验证码
+    private suspend fun forgetPassword(ctx: RoutingContext) {
+        val tel = ctx get ("tel" to "")
+        (tel.length < 11).yes {
+            ctx.jsonNormalFail("手机号格式错误")
+        }.otherwise {
+            AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.ForgetPassword, tel)
+        }
+    }
+
+    //重置密码
+    private suspend fun restPassword(ctx: RoutingContext) {
+        val tel = ctx get ("tel" to "")
+        val code = ctx get ("code" to "")
+        val newPassword = ctx get ("newPassword" to "")
+        if (code.length < 6) {
+            ctx.jsonNormalFail("验证码格式不对")
+        } else if (!ValueCheckUtils.isTel(tel)) {
+            ctx.jsonNormalFail("手机号格式不对")
+        } else if (!ValueCheckUtils.isPassword(newPassword)) {
+            ctx.jsonNormalFail("新密码格式不对")
+        } else {
+            val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
+            //如果验证码没错
+            when {
+                sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
+                sendCode != code -> ctx.jsonNormalFail("验证码错误")
+                else -> {
+                    val user = queryUserByType(tel, "tel")
+                    if (user == null) {
+                        ctx.jsonNormalFail("该用户未注册")
+                    } else {
+                        val userId = getUserId(user)
+                        val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
+                        val result = pgsql.autoConnetctionRun {
+                            /*    it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
+                                    array(userId.toString())
+                                })
+                                */
+                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,array[?::text,'credential'::text], '\"hhhh\"', FALSE) WHERE id = ?;", json {
+                                array(telIndex, userId.toString())
+                            })
+                        }
+                        //说明成功
+                        if (result.updated == 1) {
+                            log.debug("注册成功,手机号$tel")
+                            ctx.jsonOKNoData()
+                        } else {
+                            ctx.jsonNormalFail("密码修改失败,请联系客服")
+                        }
+                    }
+
+                }
+            }
+        }
+
+    }
+
+    //重置密码
+    private suspend fun updateUserInfo(ctx: RoutingContext) {
+        val updateList = arrayListOf<Pair<String, String>>()
+        val avatar = ctx get ("avatar" to "")
+        val gender = ctx get ("gender" to "")
+        val nickname = ctx get ("nickname" to "")
+        val birthday = ctx get ("birthday" to "")
+        if (avatar.isNotEmpty()) {
+            updateList.add("avatar" to avatar)
+        }
+        if (gender.isNotEmpty()) {
+            updateList.add("gender" to gender)
+        }
+        if (nickname.isNotEmpty()) {
+            updateList.add("nickname" to nickname)
+        }
+        if (birthday.isNotEmpty()) {
+            updateList.add("birthday" to nickname)
+        }
+        if (updateList.isEmpty()) {
+            ctx.jsonNormalFail("请添加修改信息")
+        } else {
+
+        }
+        /*  val newPassword = ctx get ("newPassword" to "")
+          if (code.len gth < 6) {
+              ctx.jsonNormalFail("验证码格式不对")
+          } else if (!ValueCheckUtils.isTel(tel)) {
+              ctx.jsonNormalFail("手机号格式不对")
+          } else if (!ValueCheckUtils.isPassword(newPassword)) {
+              ctx.jsonNormalFail("新密码格式不对")
+          } else {
+              val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
+              //如果验证码没错
+              when {
+                  sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
+                  sendCode != code -> ctx.jsonNormalFail("验证码错误")
+                  else -> {
+                      val user = queryUserByType(tel, "tel")
+                      if (user == null) {
+                          ctx.jsonNormalFail("该用户未注册")
+                      } else {
+                          val userId = getUserId(user)
+                          val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
+                          val result = pgsql.autoConnetctionRun {
+                              *//*    it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,'{$telIndex,credential}', '\"$newPassword\"', FALSE) WHERE id = ?", json {
+                                    array(userId.toString())
+                                })
+                                *//*
+                            it.updateWithParamsAwait("UPDATE users SET autos = jsonb_set(autos,array[?::text,'credential'::text], '\"hhhh\"', FALSE) WHERE id = ?;", json {
+                                array(telIndex, userId.toString())
+                            })
+                        }
+                        //说明成功
+                        if (result.updated == 1) {
+                            log.debug("注册成功,手机号$tel")
+                            ctx.jsonOKNoData()
+                        } else {
+                            ctx.jsonNormalFail("密码修改失败,请联系客服")
+                        }
+                    }
+
+                }
+            }
+        }
+*/
+    }
 
     /**
      * 判断用户账号,密码,类型是否正确
@@ -331,7 +394,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
      */
     private suspend fun queryUserById(id: Int): JsonArray? {
         return pgsql.autoConnetctionRun {
-            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos,users.info FROM users WHERE users.id = ?;", json {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos FROM users WHERE users.id = ?;", json {
                 array(id)
             })
         }
@@ -342,7 +405,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
      */
     private suspend fun queryUserByType(identifier: String, identity_type: String): JsonArray? {
         val info = pgsql.autoConnetctionRun {
-            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos,users.info FROM users WHERE users.autos @> ?::jsonb", json {
+            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos FROM users WHERE users.autos @> ?::jsonb", json {
                 array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
             })
         }

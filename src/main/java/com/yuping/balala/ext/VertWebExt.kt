@@ -1,5 +1,6 @@
 package com.yuping.balala.ext
 
+import com.yuping.balala.exception.MessageException
 import io.vertx.ext.asyncsql.AsyncSQLClient
 import io.vertx.ext.sql.SQLConnection
 import io.vertx.ext.web.Route
@@ -16,6 +17,8 @@ fun Route.coroutineHandler(fn: suspend (RoutingContext) -> Unit) {
         launch(ctx.vertx().dispatcher()) {
             try {
                 fn(ctx)
+            } catch (e: MessageException) {
+                ctx.jsonNormalFail(e.message!!, e.code, e.data)
             } catch (e: Exception) {
                 ctx.fail(e)
             }
