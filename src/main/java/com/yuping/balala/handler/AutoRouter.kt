@@ -18,8 +18,7 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.kotlin.core.json.array
 import io.vertx.kotlin.core.json.json
 import io.vertx.kotlin.core.json.obj
-import io.vertx.kotlin.ext.sql.querySingleWithParamsAwait
-import io.vertx.kotlin.ext.sql.updateWithParamsAwait
+import io.vertx.kotlin.ext.sql.*
 import io.vertx.kotlin.redis.getAwait
 
 
@@ -76,13 +75,13 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                     //注册
                     try {
                         val result = pgsql.autoConnetctionRun {
-                            it.querySingleWithParamsAwait("INSERT INTO users (autos,avatar,create_time) VALUES (?::JSON,?,?) RETURNING id", json {
+                            it.querySingleWithParamsAwait("INSERT INTO users (autos,avatar,create_time,role) VALUES (?::JSON,?,?,?) RETURNING id", json {
                                 array(array(obj(
                                     "identity_type" to "tel",
                                     "identifier" to tel,
                                     "credential" to password
 
-                                )).toString(), "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg", DateUtil.now())
+                                )).toString(), "http://img.wowoqq.com/allimg/180114/1-1P114104225.jpg", DateUtil.now(), Roles.COMMON.name)
                             })
 
                         }
@@ -126,7 +125,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 val token = authProvider.generateToken(json {
                     obj("tel" to tel,
                         "id" to getUserId(user),
-                        "role" to array(Roles.COMMON.name)
+                        "role" to array(getUserRole(user))
                     )
                 })
 
@@ -156,24 +155,29 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 "接口非法访问".throwMessageException()
             } else {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
-                val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
-                //查询到了,//没有就添加进去
-                (queryAutoByType(autos, identityType) == null).yes {
-                    val result = pgsql.autoConnetctionRun {
-                        it.updateWithParamsAwait("update users set autos = autos || ?::jsonb  where id = ?;", json {
-                            array(obj("identity_type" to identityType, "identifier" to identifier, "credential" to credential).toString(), ctx.jwtUser().principal().getInteger("id"))
-                        })
-                    }
-                    (result.updated == 1).yes {
-                        //返回添加成功
-                        ctx.jsonOKNoData("绑定成功")
-                    }.otherwise {
-                        "绑定失败,请再次尝试或者联系客服".throwMessageException()
-                    }
+                val user = queryUserByType(tel, "tel")
+                if (user == null) {
+                    "没有查询到用户信息".throwMessageException()
+                } else {
+                    val autos = getUserAutos(user)
+                    //查询到了,//没有就添加进去
+                    if (queryAutoByType(autos, identityType) == null) {
+                        val result = pgsql.autoConnetctionRun {
+                            it.updateWithParamsAwait("update users set autos = autos || ?::jsonb  where id = ?;", json {
+                                array(obj("identity_type" to identityType, "identifier" to identifier, "credential" to credential).toString(), ctx.jwtUser().principal().getInteger("id"))
+                            })
+                        }
+                        (result.updated == 1).yes {
+                            //返回添加成功
+                            return ctx.jsonOKNoData("绑定成功")
+                        }.otherwise {
+                            "绑定失败,请再次尝试或者联系客服".throwMessageException()
+                        }
 
-                }.otherwise {
+                    } else {
 
-                    "已经绑定过$identityType".throwMessageException()
+                        "已经绑定过$identityType".throwMessageException()
+                    }
                 }
 
 
@@ -192,27 +196,30 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                 "接口非法访问".throwMessageException()
             } else {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
-                val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
-                //查询到了就删除
-                val singleAuto = queryAutoByType(autos, identityType)
-                (singleAuto != null).yes {
-                    val result = pgsql.autoConnetctionRun {
-                        it.updateWithParamsAwait("update users set autos = autos - ?::Int where id = ?;", json {
-                            array(autos.indexOf(singleAuto).toString(), ctx.getUserField<Int>("id").toString())
-                        })
-                    }
-                    (result.updated == 1).yes {
-                        //返回添加成功
-                        ctx.jsonOKNoData("解绑成功")
-                    }.otherwise {
-                        "解绑失败,请再次尝试或者联系客服".throwMessageException()
-                    }
+                val user = queryUserByType(tel, "tel")
+                if (user == null) {
+                    "没有查询到用户信息".throwMessageException()
+                } else {
+                    val autos = getUserAutos(user)
+                    //查询到了就删除
+                    val singleAuto = queryAutoByType(autos, identityType)
+                    if (singleAuto == null) {
+                        "还没有绑定过$identityType".throwMessageException()
+                    } else {
+                        val result = pgsql.autoConnetctionRun {
+                            it.updateWithParamsAwait("update users set autos = autos - ?::Int where id = ?;", json {
+                                array(autos.indexOf(singleAuto).toString(), ctx.getUserField<Int>("id").toString())
+                            })
+                        }
+                        if (result.updated == 1) {
+                            //返回添加成功
+                            return ctx.jsonOKNoData("解绑成功")
+                        } else {
+                            "解绑失败,请再次尝试或者联系客服".throwMessageException()
+                        }
 
-                }.otherwise {
-
-                    "还没有绑定过$identityType".throwMessageException()
+                    }
                 }
-
 
             }
         }
@@ -367,20 +374,20 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     /**
      * 根据所以userId查询到对应user
      */
-    private suspend fun queryUserById(id: Int): JsonArray? {
+    private suspend fun queryUserById(id: Int): JsonObject? {
         return pgsql.autoConnetctionRun {
-            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos FROM users WHERE users.id = ?;", json {
+            return@autoConnetctionRun it.querySingleObjWithParamsAwait("SELECT users.id,users.autos,users.role FROM users WHERE users.id = ?;", json {
                 array(id)
             })
         }
     }
 
     /**
-     * 根据验证类型查用户信息
+     * 根据验证类型查用户信息user
      */
-    private suspend fun queryUserByType(identifier: String, identity_type: String): JsonArray? {
+    private suspend fun queryUserByType(identifier: String, identity_type: String): JsonObject? {
         val info = pgsql.autoConnetctionRun {
-            return@autoConnetctionRun it.querySingleWithParamsAwait("SELECT users.id,users.autos FROM users WHERE users.autos @> ?::jsonb", json {
+            return@autoConnetctionRun it.querySingleObjWithParamsAwait("SELECT users.id,users.autos,users.role FROM users WHERE users.autos @> ?::jsonb", json {
                 array("${array(obj("identity_type" to identity_type, "identifier" to identifier))}")
             })
         }
@@ -391,21 +398,22 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     /**
      * 根据user拿到autos
      */
-    private fun getUserAutos(user: JsonArray): JsonArray {
-        return JsonArray(user.getString(1))
+    private fun getUserAutos(user: JsonObject): JsonArray {
+        return JsonArray(user.getString("autos"))
     }
 
     /**
      * 根据userarray拿到id
      */
-    private fun getUserId(user: JsonArray): Int {
-        return user.getInteger(0)
+    private fun getUserId(user: JsonObject): Int {
+        return user.getInteger("id")
     }
+
 
     /**
      * 根据userobj(也就是token里)拿到id
      */
-    private fun getUserId(user: JsonObject): Int {
-        return user.getInteger("id")
+    private fun getUserRole(user: JsonObject): String {
+        return user.getString("role")
     }
 }
