@@ -44,11 +44,11 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     private suspend fun register1(ctx: RoutingContext) {
         val tel = ctx get ("tel" to "")
         if (tel.length < 11) {
-            ctx.jsonNormalFail("手机号格式错误")
+            "手机号格式错误".throwMessageException()
         } else {
             val single = queryUserByType(tel, "tel")
             if (single != null) {
-                ctx.jsonNormalFail("手机号已经注册")
+                "手机号已经注册".throwMessageException()
             } else {
                 AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.RegisterCode, tel)
             }
@@ -63,11 +63,10 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         val password = ctx get ("password" to "")
         val authCode = ctx get ("authCode" to "")
         if (tel.length < 11 || password.isEmpty() || authCode.isEmpty()) {
-            ctx.jsonNormalFail("手机号,密码和验证码不能不填")
+            "手机号,密码和验证码不能不填".throwMessageException()
         } else {
             if (queryUserByType(tel, "tel") != null) {
-                ctx.jsonNormalFail("手机号已经注册")
-                return
+                "手机号已经注册".throwMessageException()
             }
             val codeKey = "RegisterCode$tel"
             val code: String? = redis.getAwait(codeKey)
@@ -93,17 +92,17 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                             val userId = result.getLong(0)
                             ctx.jsonOKNoData()
                         } else {
-                            ctx.jsonNormalFail("注册失败,请联系客服")
+                            "注册失败,请联系客服".throwMessageException()
                         }
                     } catch (e: GenericDatabaseException) {
-                        ctx.jsonNormalFail("手机号已经注册")
+                        "手机号已经注册".throwMessageException()
                     }
 
                 } else {
-                    ctx.jsonNormalFail("验证码有误,请重新尝试")
+                    "验证码有误,请重新尝试".throwMessageException()
                 }
             } else {
-                ctx.jsonNormalFail("请返回上一步发送验证码")
+                "请返回上一步发送验证码".throwMessageException()
 
             }
 
@@ -138,7 +137,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                     )
                 })
             } else {
-                ctx.jsonNormalFail("登录信息不匹配")
+                "登录信息不匹配".throwMessageException()
             }
 
         }
@@ -150,11 +149,11 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         val credential = ctx get ("credential" to "")
         val identityType = ctx get ("identity_type" to "")
         (identifier.isEmpty() || credential.isEmpty() || (!openIdTypeList.contains(identityType))).yes {
-            ctx.jsonNormalFail("输入信息不完整")
+            "输入信息不完整".throwMessageException()
         }.otherwise {
             val tel = ctx.jwtUser().principal().getString("tel")
             if (tel.isEmpty()) {
-                ctx.jsonNormalFail("接口非法访问")
+                "接口非法访问".throwMessageException()
             } else {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
                 val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
@@ -169,12 +168,12 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                         //返回添加成功
                         ctx.jsonOKNoData("绑定成功")
                     }.otherwise {
-                        ctx.jsonNormalFail("绑定失败,请再次尝试或者联系客服")
+                        "绑定失败,请再次尝试或者联系客服".throwMessageException()
                     }
 
                 }.otherwise {
 
-                    ctx.jsonNormalFail("已经绑定过$identityType")
+                    "已经绑定过$identityType".throwMessageException()
                 }
 
 
@@ -186,11 +185,11 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     private suspend fun unBindOpenID(ctx: RoutingContext) {
         val identityType = ctx get ("identity_type" to "")
         ((!openIdTypeList.contains(identityType))).yes {
-            ctx.jsonNormalFail("输入信息不完整")
+            "输入信息不完整".throwMessageException()
         }.otherwise {
             val tel = ctx.getUserField<String>("tel")
             if (tel!!.isEmpty()) {
-                ctx.jsonNormalFail("接口非法访问")
+                "接口非法访问".throwMessageException()
             } else {
                 //查询到用户autos 判断里面是否有第三方对应的identifier
                 val autos = JsonArray(queryUserByType(tel, "tel")?.getString(1))
@@ -206,12 +205,12 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                         //返回添加成功
                         ctx.jsonOKNoData("解绑成功")
                     }.otherwise {
-                        ctx.jsonNormalFail("解绑失败,请再次尝试或者联系客服")
+                        "解绑失败,请再次尝试或者联系客服".throwMessageException()
                     }
 
                 }.otherwise {
 
-                    ctx.jsonNormalFail("还没有绑定过$identityType")
+                    "还没有绑定过$identityType".throwMessageException()
                 }
 
 
@@ -223,7 +222,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
     private suspend fun forgetPassword(ctx: RoutingContext) {
         val tel = ctx get ("tel" to "")
         (tel.length < 11).yes {
-            ctx.jsonNormalFail("手机号格式错误")
+            "手机号格式错误".throwMessageException()
         }.otherwise {
             AuthCodeUtils.sendKeyCode(ctx, redis, AutoCode.ForgetPassword, tel)
         }
@@ -235,21 +234,21 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         val code = ctx get ("code" to "")
         val newPassword = ctx get ("newPassword" to "")
         if (code.length < 6) {
-            ctx.jsonNormalFail("验证码格式不对")
+            "验证码格式不对".throwMessageException()
         } else if (!ValueCheckUtils.isTel(tel)) {
-            ctx.jsonNormalFail("手机号格式不对")
+            "手机号格式不对".throwMessageException()
         } else if (!ValueCheckUtils.isPassword(newPassword)) {
-            ctx.jsonNormalFail("新密码格式不对")
+            "新密码格式不对".throwMessageException()
         } else {
             val sendCode: String? = redis.getAwait("${AutoCode.ForgetPassword}$tel")
             //如果验证码没错
             when {
-                sendCode == null -> ctx.jsonNormalFail("请发送验证码后再试")
-                sendCode != code -> ctx.jsonNormalFail("验证码错误")
+                sendCode == null -> "请发送验证码后再试".throwMessageException()
+                sendCode != code -> "验证码错误".throwMessageException()
                 else -> {
                     val user = queryUserByType(tel, "tel")
                     if (user == null) {
-                        ctx.jsonNormalFail("该用户未注册")
+                        "该用户未注册".throwMessageException()
                     } else {
                         val userId = getUserId(user)
                         val telIndex = querySingleAutoIndexById(getUserAutos(user), "tel")
@@ -267,7 +266,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
                             log.debug("注册成功,手机号$tel")
                             ctx.jsonOKNoData()
                         } else {
-                            ctx.jsonNormalFail("密码修改失败,请联系客服")
+                            "密码修改失败,请联系客服".throwMessageException()
                         }
                     }
 
@@ -317,7 +316,7 @@ class AutoRouter(vertx: Vertx) : SubRouter(vertx) {
         if (result.updated == 1) {
             ctx.jsonOKNoData()
         } else {
-            ctx.jsonNormalFail("资料修改失败")
+            "资料修改失败".throwMessageException()
         }
     }
 
