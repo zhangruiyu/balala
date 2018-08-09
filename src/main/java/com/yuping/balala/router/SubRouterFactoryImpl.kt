@@ -1,6 +1,7 @@
 package com.yuping.balala.router
 
 import com.yuping.balala.handler.AutoRouter
+import com.yuping.balala.handler.StoreRouter
 import io.vertx.core.Handler
 import io.vertx.core.Vertx
 import io.vertx.ext.auth.jwt.JWTAuth
@@ -23,6 +24,9 @@ class SubRouterFactoryImpl constructor(private val jwtProvider: JWTAuth, private
         val router: SubRouter = when (type) {
             SubRouterFactory.SubRouterType.AUTH -> {
                 AutoRouter(vert)
+            }
+            SubRouterFactory.SubRouterType.STORE -> {
+                StoreRouter(vert)
             }
             else -> AutoRouter(vert)
         }

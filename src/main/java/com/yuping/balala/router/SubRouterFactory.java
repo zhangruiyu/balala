@@ -11,7 +11,7 @@ public interface SubRouterFactory {
 
     enum SubRouterType{
         AUTH,
-        ALIPAY_OAUTH,
+        STORE,
         WECHAT_PAY,
         ALIPAY_PAY,
         WECHAT_MSG,

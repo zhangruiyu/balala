@@ -1,10 +1,7 @@
 package com.yuping.balala
 
-import com.yuping.balala.config.commonRole
-import com.yuping.balala.config.jwtConfig
+import com.yuping.balala.config.*
 import com.yuping.balala.router.SubRouterFactory
-import com.yuping.balala.config.pgsqlConfig
-import com.yuping.balala.config.port
 import com.yuping.balala.ext.*
 import com.yuping.balala.router.SubRouterFactoryImpl
 import io.vertx.core.http.HttpServer
@@ -31,7 +28,9 @@ class RestVerticle : CoroutineVerticle() {
         router.route().handler(BodyHandler.create())
         val authProvider = JWTAuth.create(vertx, jwtConfig)
         router.routeWithRegex(".*/common/.*").handler(JWTAuthHandler.create(authProvider).addAuthorities(commonRole))
+        router.routeWithRegex(".*/admin/.*").handler(JWTAuthHandler.create(authProvider).addAuthorities(adminRole))
         router.mountSubRouter("/auth", subRouterFactory.create(SubRouterFactory.SubRouterType.AUTH))
+        router.mountSubRouter("/store", subRouterFactory.create(SubRouterFactory.SubRouterType.STORE))
 //        router.get("/home").handler(listChain)
 //        router.mountSubRouter("auth")
         awaitResult<HttpServer> {
